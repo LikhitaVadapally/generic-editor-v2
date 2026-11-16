@@ -235,4 +235,9 @@ export const TRANSLATIONS_FR: Record<string, string> = {
   DYNAMIC_ASSESS_STALE_TIP: 'Paramètres modifiés — générez d’abord les questions à nouveau',
   ERROR_DYNAMIC_ASSESS_STALE: 'La compétence ou l’objectif de difficulté a changé depuis la génération des questions. Générez-les à nouveau, puis envoyez en révision.',
   ERROR_DYNAMIC_ASSESS_STALE_REVIEW: 'Les questions ne correspondent pas à la compétence ou à l’objectif de difficulté actuels. Demandez des modifications pour que le créateur les régénère.',
+  SKILL_FRAMEWORK: 'Cadre de compétences',
+  SELECT_SKILL_FRAMEWORK: 'Sélectionnez un cadre de compétences',
+  SKILLS: 'Compétences',
+  SELECT_SKILLS: 'Sélectionnez des compétences',
+  SELECT_SKILL_FRAMEWORK_FIRST: 'Sélectionnez d’abord un cadre de compétences',
 };

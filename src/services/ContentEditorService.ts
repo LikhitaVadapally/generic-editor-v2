@@ -1,4 +1,5 @@
 /** ContentEditorService — backend abstraction for the editor; calls go to relative `/action/...` (proxied to knowledge-mw/Kong) by default, overridable via EditorConfig. */
+import type { CompetencyCategoryWire } from '../competencyLeaves';
 import type { ContentData, EditorContext, EditorConfig, FrameworkCategory, FormField, AssetItem, EnrichmentObject } from '../types';
 
 /** Keep in sync with useEditor.ts's DYNAMIC_ASSESS_CATEGORY (not imported: the modules don't otherwise depend on each other). */
@@ -27,6 +28,8 @@ const DEFAULT_ENDPOINTS = {
   reviewCommentRead: 'review/comment/v1/read/comment',
   /* Only the gateway (served under portalSlug, not /action) exposes the enrichment object list. */
   enrichmentList: 'object/enrichment/v4/list',
+  /* Skill (competency) framework read; like the enrichment list, only the gateway serves it. */
+  competencyFrameworkRead: 'competency-framework/v3/read',
   /* Dynamic Assess — triggers the knowlg-publish job's pool-based question selection. */
   refreshBody: 'content/v3/refresh/body',
 } as const;
@@ -38,6 +41,8 @@ const READ_FIELDS = [
   'status', 'artifactUrl', 'streamingUrl', 'downloadUrl', 'appIcon', 'posterImage',
   'framework', 'board', 'medium', 'gradeLevel', 'subject', 'keywords', 'collaborators',
   'createdBy', 'creator', 'versionKey', 'pkgVersion', 'enrichmentTypes', 'rejectReasons', 'rejectComment', 'channel',
+  /* Skill tagging: the skill framework's id; its skills sit in that framework's own field, which callers add via extraFields. */
+  'competencyFramework',
   /* Dynamic Assess fields (absent on other content); the knowlg-publish job sets totalQuestions and lastUpdatedOn, knowlg-service sets minCriteria and multiplier at create. The selected skills' field depends on the framework, so callers add it via extraFields. */
   'difficultyTarget', 'totalQuestions', 'lastUpdatedOn', 'minCriteria', 'multiplier',
 ].join(',');
@@ -460,6 +465,27 @@ export class ContentEditorService {
     return (result?.Framework ?? [])
       .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? '') }))
       .filter((f) => f.identifier);
+  }
+
+  /** Live skill (competency) frameworks of the channel, for "Skill framework"; they never appear in the curriculum Framework list. */
+  async searchCompetencyFrameworks(channel?: string): Promise<Array<{ identifier: string; name: string }>> {
+    const result = await this.request<{ CompetencyFramework?: Array<Record<string, unknown>> }>(
+      'POST',
+      this.ep.compositeSearch,
+      { request: { filters: { objectType: ['CompetencyFramework'], status: ['Live'] }, fields: ['identifier', 'name'], limit: 100, sort_by: { name: 'asc' } } },
+      channel ? { headers: { 'X-Channel-Id': channel } } : undefined,
+    );
+    return (result?.CompetencyFramework ?? [])
+      .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? '') }))
+      .filter((f) => f.identifier);
+  }
+
+  /** GET {portalSlug}/competency-framework/v3/read/{id} — a skill framework's categories and terms. */
+  async readCompetencyFramework(frameworkId: string): Promise<CompetencyCategoryWire[]> {
+    const url = `${this.baseUrl}${this.portalSlug}/${this.ep.competencyFrameworkRead}/${encodeURIComponent(frameworkId)}`;
+    const resp = await this.fetchImpl(url, { method: 'GET', headers: this.headers, credentials: 'same-origin' });
+    const data = await this.readEnvelope<{ result?: { framework?: { categories?: CompetencyCategoryWire[] } } }>(resp, url);
+    return data.result?.framework?.categories ?? [];
   }
 
   /** Creates an image Asset record then uploads the file to it (asset/v1/create → asset/v1/upload/{id}), returning the artifact URL. */

@@ -235,4 +235,9 @@ export const TRANSLATIONS_HI: Record<string, string> = {
   DYNAMIC_ASSESS_STALE_TIP: 'सेटिंग्स बदली गई हैं — पहले प्रश्न फिर से तैयार करें',
   ERROR_DYNAMIC_ASSESS_STALE: 'प्रश्न तैयार होने के बाद कौशल या कठिनाई लक्ष्य बदला गया है। उन्हें फिर से तैयार करें, फिर समीक्षा के लिए भेजें।',
   ERROR_DYNAMIC_ASSESS_STALE_REVIEW: 'प्रश्न वर्तमान कौशल या कठिनाई लक्ष्य से मेल नहीं खाते। परिवर्तन का अनुरोध करें ताकि निर्माता उन्हें फिर से तैयार कर सके।',
+  SKILL_FRAMEWORK: 'कौशल फ्रेमवर्क',
+  SELECT_SKILL_FRAMEWORK: 'कौशल फ्रेमवर्क चुनें',
+  SKILLS: 'कौशल',
+  SELECT_SKILLS: 'कौशल चुनें',
+  SELECT_SKILL_FRAMEWORK_FIRST: 'पहले कौशल फ्रेमवर्क चुनें',
 };

@@ -8,6 +8,7 @@ import { ContentEditorService } from './services/ContentEditorService';
 import { difficultyTargetTotal, toDifficultyTarget } from './difficultyTarget';
 import { generatedSettings, isGenerationStale, needsGeneration, selectedSkills } from './dynamicAssessDraw';
 import { deepestCategoryCode } from './taxonomy';
+import { SKILL_FRAMEWORK_FIELD, loadSkillFramework } from './skillTagging';
 import { UploadService, detectFileMime, detectUrlMime } from './services/UploadService';
 import { ENRICHMENT_REGISTRY, enrichmentTypesForMime } from './services/enrichment/registry';
 import { TelemetryService } from './telemetry/TelemetryService';
@@ -224,6 +225,19 @@ export function useEditor(opts: UseEditorOptions) {
     }
   };
 
+  /** Tagged content's skills live in its skill framework's own field, which the plain read doesn't fetch; a failure leaves the content as read. */
+  const withSkillTags = async (c: ContentData): Promise<ContentData> => {
+    const fw = c[SKILL_FRAMEWORK_FIELD];
+    if (typeof fw !== 'string' || !fw) return c;
+    try {
+      const { skillField } = await loadSkillFramework(service, fw);
+      if (!skillField || skillField in c) return c;
+      return await service.readContent(c.identifier, 'edit', { extraFields: [skillField] });
+    } catch {
+      return c;
+    }
+  };
+
   /* ---- Initial load ---- */
   useEffect(() => {
     telemetry.current?.start('content-editor');
@@ -235,7 +249,7 @@ export function useEditor(opts: UseEditorOptions) {
       .readContent(initialId)
       // Only Dynamic Assess needs its body (generated questions) and its framework's skill field, so only it pays for a second read with them.
       .then(async (c) => {
-        if (c.primaryCategory !== DYNAMIC_ASSESS_CATEGORY) return c;
+        if (c.primaryCategory !== DYNAMIC_ASSESS_CATEGORY) return withSkillTags(c);
         const field = await resolveSkillField(c.framework);
         skillFieldRef.current = field;
         return withDynamicSkills(await service.readContent(initialId, 'edit', { withBody: true, extraFields: [field] }), field);

@@ -1,5 +1,8 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Drawer from './Drawer';
+import MultiSelect from './MultiSelect';
+import SkillTagFields from './SkillTagFields';
+import { SKILL_FRAMEWORK_FIELD, asCodes, useSkillFramework } from '../skillTagging';
 import type { EditorController } from '../useEditor';
 import type { FormField, FrameworkCategory } from '../types';
 import { t, tf } from '../i18n/i18n';
@@ -164,54 +167,6 @@ const Select: React.FC<{
   </div>
 );
 
-/** Checkbox popover for multi-value taxonomy fields (medium, class, subject). */
-const MultiSelect: React.FC<{
-  label: string; placeholder: string; values: string[]; required?: boolean; disabled?: boolean;
-  options: { code: string; name: string }[]; onChange: (v: string[]) => void;
-}> = ({ label, placeholder, values, required, disabled, options, onChange }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-  const toggle = (name: string) =>
-    onChange(values.includes(name) ? values.filter((v) => v !== name) : [...values, name]);
-  const summary = values.length ? values.join(', ') : placeholder;
-  return (
-    <div>
-      <label className="ce-label-sm">{label}{required && <span className="ce-required-star">*</span>}</label>
-      <div className="ce-multi" ref={ref}>
-        <button
-          type="button"
-          className="ce-multi-control"
-          disabled={disabled}
-          onClick={() => setOpen((o) => !o)}
-        >
-          <span className={`ce-multi-summary${values.length ? '' : ' is-placeholder'}`}>{summary}</span>
-          <span className="ce-select-chevron"><ChevronDown size={12} /></span>
-        </button>
-        {open && (
-          <div className="ce-multi-panel">
-            {options.length === 0 ? (
-              <div className="ce-multi-empty">{placeholder}</div>
-            ) : (
-              options.map((o) => (
-                <label key={o.code} className="ce-multi-opt">
-                  <input type="checkbox" checked={values.includes(o.name)} onChange={() => toggle(o.name)} />
-                  <span>{o.name}</span>
-                </label>
-              ))
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
 const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   const {
     lang, content, drawer, setDrawer, saveMetadata, saveMetadataAndSubmit, service, framework, busy, busyAction,
@@ -241,12 +196,28 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   const [checking, setChecking] = useState(false);
   const [fwOptions, setFwOptions] = useState<Array<{ identifier: string; name: string }>>([]);
   const contentChannel = (content as Record<string, unknown> | null)?.channel as string | undefined;
+  /* Skill tagging (not Dynamic Assess, whose skill picker means something else): the skill framework and its picked skill codes. */
+  const tagsSkills = !ed.isDynamicAssess;
+  const [skillFw, setSkillFw] = useState('');
+  const [skillFwOptions, setSkillFwOptions] = useState<Array<{ identifier: string; name: string }>>([]);
+  /** null until seeded from the content's skill field, which is known once its framework loads. */
+  const [skillCodes, setSkillCodes] = useState<string[] | null>(null);
+  const [skillDirty, setSkillDirty] = useState(false);
+  /** Skill fields of frameworks switched away from this session; saved empty so the old skills don't linger. */
+  const [staleSkillFields, setStaleSkillFields] = useState<string[]>([]);
+  const { skills: fwSkills, skillField } = useSkillFramework(service, tagsSkills ? skillFw : '');
 
   // Bumped on every open/close, so a save still awaiting its pool check after the drawer closed is dropped.
   const sessionRef = useRef(0);
   useEffect(() => {
     sessionRef.current += 1;
     if (open) setSelectedFw(String(content?.framework || framework || ''));
+    if (open) {
+      setSkillFw(String((content as Record<string, unknown> | null)?.[SKILL_FRAMEWORK_FIELD] ?? ''));
+      setSkillCodes(null);
+      setSkillDirty(false);
+      setStaleSkillFields([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, content?.identifier]);
 
@@ -254,6 +225,26 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
     if (!open || !ed.isDynamicAssess) return;
     service.searchFrameworks(contentChannel ?? ed.context.channel).then(setFwOptions).catch(() => setFwOptions([]));
   }, [open, ed.isDynamicAssess, service, contentChannel, ed.context.channel]);
+
+  useEffect(() => {
+    if (!open || !tagsSkills) return;
+    service.searchCompetencyFrameworks(contentChannel ?? ed.context.channel).then(setSkillFwOptions).catch(() => setSkillFwOptions([]));
+  }, [open, tagsSkills, service, contentChannel, ed.context.channel]);
+
+  /* Seeds the picked skills from the content once its skill framework (and so its skill field) has loaded. */
+  useEffect(() => {
+    if (!open || skillCodes !== null || !skillField) return;
+    setSkillCodes(asCodes((content as Record<string, unknown> | null)?.[skillField]));
+  }, [open, skillCodes, skillField, content]);
+
+  /** A new skill framework has different skills, so the old picks are cleared, here and on save. */
+  const onSkillFrameworkChange = (fw: string) => {
+    if (fw === skillFw) return;
+    if (skillField) setStaleSkillFields((s) => (s.includes(skillField) ? s : [...s, skillField]));
+    setSkillFw(fw);
+    setSkillCodes([]);
+    setSkillDirty(true);
+  };
 
   /* Framework categories for taxonomy cascade. */
   useEffect(() => {
@@ -451,6 +442,12 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
     }
     if (appIcon) out.appIcon = appIcon;
     if (ed.isDynamicAssess && selectedFw) out.framework = selectedFw;
+    // Skill tags are only written once the creator touches them, so other edits never rewrite them.
+    if (tagsSkills && skillDirty && skillFw) {
+      out[SKILL_FRAMEWORK_FIELD] = skillFw;
+      for (const f of staleSkillFields) if (f !== skillField) out[f] = [];
+      if (skillField) out[skillField] = skillCodes ?? [];
+    }
     out.name = (values.name ?? '').trim();
     return out;
   };
@@ -735,6 +732,19 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
         <div className="ce-taxo-grid">
           {taxoFields.map(renderField)}
         </div>
+      )}
+
+      {tagsSkills && (
+        <SkillTagFields
+          lang={lang}
+          frameworks={skillFwOptions}
+          frameworkId={skillFw}
+          skills={fwSkills}
+          skillField={skillField}
+          values={skillCodes ?? []}
+          onFrameworkChange={onSkillFrameworkChange}
+          onSkillsChange={(codes) => { setSkillCodes(codes); setSkillDirty(true); }}
+        />
       )}
     </Drawer>
   );

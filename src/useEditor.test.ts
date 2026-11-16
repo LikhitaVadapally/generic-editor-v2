@@ -5,6 +5,7 @@ import { detectFileMime } from './services/UploadService';
 import type { ContentEditorService } from './services/ContentEditorService';
 import type { ContentData, EnrichmentObject } from './types';
 import { mockContext } from './test/mockEd';
+import { clearSkillFrameworkCache } from './skillTagging';
 
 vi.mock('./services/UploadService', () => ({
   UploadService: class {
@@ -718,5 +719,39 @@ describe('useEditor — Dynamic Assess skills live in the framework\'s deepest c
     await mountWithContent(service, videoContent({ artifactUrl: 'https://cdn/video.mp4', framework: 'BMGS' } as Partial<ContentData>));
     expect(readFramework).not.toHaveBeenCalled();
     for (const call of (service.readContent as ReturnType<typeof vi.fn>).mock.calls) expect(call[2]).toBeUndefined();
+  });
+});
+
+describe('useEditor — skill tags on open', () => {
+  beforeEach(() => clearSkillFrameworkCache());
+
+  it("reads tagged content's skills from its skill framework's own field", async () => {
+    const tagged = videoContent({ competencyFramework: 'fw_agro' });
+    const service = svc({
+      readCompetencyFramework: vi.fn().mockResolvedValue([
+        { code: 'domain', index: 1, terms: [] },
+        { code: 'cuisine', index: 2, terms: [{ code: 'c_soil', name: 'Soil testing' }] },
+      ]),
+    });
+    (service.readContent as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(tagged)
+      .mockResolvedValueOnce({ ...tagged, cuisine: ['c_soil'] });
+    const { result } = renderHook(() => useEditor({ context: mockContext, contentId: tagged.identifier, service }));
+    await waitFor(() => expect(result.current.content?.cuisine).toEqual(['c_soil']));
+    expect(service.readContent).toHaveBeenLastCalledWith(tagged.identifier, 'edit', { extraFields: ['cuisine'] });
+  });
+
+  it('reads untagged content once (negative)', async () => {
+    const service = svc({ readCompetencyFramework: vi.fn() });
+    await mountWithContent(service, videoContent());
+    expect(service.readContent).toHaveBeenCalledTimes(1);
+    expect(service.readCompetencyFramework).not.toHaveBeenCalled();
+  });
+
+  it('keeps the content as read when the skill framework fails to load (negative)', async () => {
+    const service = svc({ readCompetencyFramework: vi.fn().mockRejectedValue(new Error('down')) });
+    const result = await mountWithContent(service, videoContent({ competencyFramework: 'fw_x' }));
+    expect(result.current.content?.competencyFramework).toBe('fw_x');
+    expect(service.readContent).toHaveBeenCalledTimes(1);
   });
 });

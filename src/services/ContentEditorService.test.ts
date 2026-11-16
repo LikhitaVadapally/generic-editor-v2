@@ -400,3 +400,47 @@ describe('ContentEditorService.listEnrichmentObjects', () => {
     expect(new ContentEditorService({}, { enrichmentList: 'x/list' } as never).getEndpoints().enrichmentList).toBe('x/list');
   });
 });
+
+describe('ContentEditorService skill frameworks', () => {
+  const withFetch = async (reply: unknown, run: (svc: ContentEditorService) => Promise<void>) => {
+    const savedFetch = globalThis.fetch;
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ responseCode: 'OK', result: reply }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      await run(new ContentEditorService());
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+    return calls;
+  };
+
+  it('lists the Live CompetencyFramework objects of the channel', async () => {
+    let list: Array<{ identifier: string; name: string }> = [];
+    const calls = await withFetch({ CompetencyFramework: [{ identifier: 'fw_agro', name: 'Agro' }, { name: 'no id' }] }, async (svc) => {
+      list = await svc.searchCompetencyFrameworks('ch1');
+    });
+    expect(list).toEqual([{ identifier: 'fw_agro', name: 'Agro' }]);
+    expect(calls[0]?.url).toBe('/action/composite/v3/search');
+    const body = JSON.parse(String(calls[0]?.init?.body));
+    expect(body.request.filters).toEqual({ objectType: ['CompetencyFramework'], status: ['Live'] });
+    expect((calls[0]?.init?.headers as Record<string, string>)['X-Channel-Id']).toBe('ch1');
+  });
+
+  it('reads a skill framework through the gateway, not /action', async () => {
+    let cats: unknown[] = [];
+    const calls = await withFetch({ framework: { categories: [{ code: 'cuisine' }] } }, async (svc) => {
+      cats = await svc.readCompetencyFramework('fw_agro');
+    });
+    expect(calls[0]?.url).toBe('/portal/competency-framework/v3/read/fw_agro');
+    expect(cats).toEqual([{ code: 'cuisine' }]);
+  });
+
+  it('returns no categories for a framework without any (negative)', async () => {
+    let cats: unknown[] = ['x'];
+    await withFetch({ framework: {} }, async (svc) => { cats = await svc.readCompetencyFramework('fw_empty'); });
+    expect(cats).toEqual([]);
+  });
+});

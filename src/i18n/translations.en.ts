@@ -246,4 +246,9 @@ export const TRANSLATIONS_EN: Record<string, string> = {
   ERROR_TITLE_REQUIRED: 'Title is required.',
   RETRY: 'Retry',
   REFRESH: 'Refresh',
+  SKILL_FRAMEWORK: 'Skill framework',
+  SELECT_SKILL_FRAMEWORK: 'Select a skill framework',
+  SKILLS: 'Skills',
+  SELECT_SKILLS: 'Select skills',
+  SELECT_SKILL_FRAMEWORK_FIRST: 'Select a skill framework first',
 };

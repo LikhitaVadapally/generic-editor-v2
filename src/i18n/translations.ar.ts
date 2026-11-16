@@ -235,4 +235,9 @@ export const TRANSLATIONS_AR: Record<string, string> = {
   DYNAMIC_ASSESS_STALE_TIP: 'تغيّرت الإعدادات — أعد إنشاء الأسئلة أولاً',
   ERROR_DYNAMIC_ASSESS_STALE: 'تغيّرت المهارة أو هدف الصعوبة منذ إنشاء الأسئلة. أعد إنشاءها ثم أرسل للمراجعة.',
   ERROR_DYNAMIC_ASSESS_STALE_REVIEW: 'الأسئلة لا تطابق المهارة أو هدف الصعوبة الحاليين. اطلب تغييرات ليتمكن المنشئ من إعادة إنشائها.',
+  SKILL_FRAMEWORK: 'إطار المهارات',
+  SELECT_SKILL_FRAMEWORK: 'اختر إطار مهارات',
+  SKILLS: 'المهارات',
+  SELECT_SKILLS: 'اختر المهارات',
+  SELECT_SKILL_FRAMEWORK_FIRST: 'اختر إطار مهارات أولاً',
 };

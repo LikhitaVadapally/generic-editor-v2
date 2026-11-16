@@ -235,4 +235,9 @@ export const TRANSLATIONS_PT: Record<string, string> = {
   DYNAMIC_ASSESS_STALE_TIP: 'Configurações alteradas — gere as questões novamente primeiro',
   ERROR_DYNAMIC_ASSESS_STALE: 'A Habilidade ou a Meta de dificuldade mudou desde que as questões foram geradas. Gere-as novamente e depois envie para revisão.',
   ERROR_DYNAMIC_ASSESS_STALE_REVIEW: 'As questões não correspondem à Habilidade ou à Meta de dificuldade atuais. Solicite alterações para que o criador as gere novamente.',
+  SKILL_FRAMEWORK: 'Estrutura de competências',
+  SELECT_SKILL_FRAMEWORK: 'Selecione uma estrutura de competências',
+  SKILLS: 'Competências',
+  SELECT_SKILLS: 'Selecione competências',
+  SELECT_SKILL_FRAMEWORK_FIRST: 'Selecione primeiro uma estrutura de competências',
 };

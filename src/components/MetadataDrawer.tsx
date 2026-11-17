@@ -6,7 +6,7 @@ import { SKILL_FRAMEWORK_FIELD, asCodes, useSkillFramework } from '../skillTaggi
 import type { EditorController } from '../useEditor';
 import type { FormField, FrameworkCategory } from '../types';
 import { t, tf } from '../i18n/i18n';
-import { cascadedOptions, deepestCategoryCode } from '../taxonomy';
+import { KNOWN_CATEGORY_CODES, adaptFieldsToFramework, cascadedOptions, deepestCategoryCode } from '../taxonomy';
 import { PencilIcon, ChevronDown, ImageIcon, CheckIcon } from '../icons';
 import { type DifficultyTarget, toDifficultyTarget, serializeDifficultyTarget } from '../difficultyTarget';
 import { dynamicAssessSettings, needsGeneration } from '../dynamicAssessDraw';
@@ -190,8 +190,14 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   const seededRef = useRef<string | null>(null);
   /** Separate seed guard for difficultyTarget: it only appears once the async form loads, after seededRef has already fired. */
   const diffSeededRef = useRef<string | null>(null);
-  /* Dynamic Assess: author-chosen framework; skill options come from its deepest category. */
+  /* The content's taxonomy framework, picked by the author (Dynamic Assess also takes its skill options from its deepest category). */
   const [selectedFw, setSelectedFw] = useState('');
+  /** Category codes of frameworks switched away from this session (code -> was multiselect); saved empty so their terms don't linger. */
+  const [staleCategories, setStaleCategories] = useState<Record<string, boolean>>({});
+  /** Every category code seen this session, so a form field for any of them is known to be a taxonomy field. */
+  const seenCategoryCodes = useRef<Set<string>>(new Set(KNOWN_CATEGORY_CODES));
+  /** Field codes already seeded from the content this session; fields a framework adds later are seeded once, then left to the author. */
+  const seededCodes = useRef<Set<string>>(new Set());
   // True while the pool searches run before a generating save, so a second click can't save twice.
   const [checking, setChecking] = useState(false);
   const [fwOptions, setFwOptions] = useState<Array<{ identifier: string; name: string }>>([]);
@@ -211,7 +217,10 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   const sessionRef = useRef(0);
   useEffect(() => {
     sessionRef.current += 1;
-    if (open) setSelectedFw(String(content?.framework || framework || ''));
+    if (open) {
+      setSelectedFw(String(content?.framework || framework || ''));
+      setStaleCategories({});
+    }
     if (open) {
       setSkillFw(String((content as Record<string, unknown> | null)?.[SKILL_FRAMEWORK_FIELD] ?? ''));
       setSkillCodes(null);
@@ -222,8 +231,16 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   }, [open, content?.identifier]);
 
   useEffect(() => {
-    if (!open || !ed.isDynamicAssess) return;
-    service.searchFrameworks(contentChannel ?? ed.context.channel).then(setFwOptions).catch(() => setFwOptions([]));
+    if (!open) return;
+    const channel = contentChannel ?? ed.context.channel;
+    // Dynamic Assess keeps its system-default list; other content offers the channel's own frameworks, as a course's
+    // "Course Type" does, falling back to the system-default list when the channel names none.
+    const load = ed.isDynamicAssess
+      ? service.searchFrameworks(channel)
+      : service.readChannelFrameworks(channel)
+        .catch(() => [])
+        .then((list) => (list.length ? list : service.searchFrameworks(channel)));
+    load.then(setFwOptions).catch(() => setFwOptions([]));
   }, [open, ed.isDynamicAssess, service, contentChannel, ed.context.channel]);
 
   useEffect(() => {
@@ -248,39 +265,45 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
 
   /* Framework categories for taxonomy cascade. */
   useEffect(() => {
-    // Dynamic Assess follows the picker alone, so choosing its placeholder leaves Skill without options.
-    const fw = ed.isDynamicAssess ? selectedFw : (content?.framework || framework);
+    // Follows the picker alone, so choosing Dynamic Assess's placeholder leaves Skill without options.
+    const fw = selectedFw;
     if (!open || !fw || loadedFw.current === fw) return;
     loadedFw.current = fw;
     // Only the latest requested framework may apply, since a slower earlier read can resolve after it.
     service.readFramework(fw)
-      .then((c) => { if (loadedFw.current === fw) setCategories(c); })
+      .then((c) => {
+        if (loadedFw.current !== fw) return;
+        for (const cat of c) seenCategoryCodes.current.add(cat.code);
+        setCategories(c);
+      })
       .catch(() => { if (loadedFw.current === fw) setCategories([]); });
-  }, [open, content, framework, service, selectedFw, ed.isDynamicAssess]);
+  }, [open, service, selectedFw]);
 
   /* Form/read field definitions — save form for Edit Details, review form for
-   * Submit-for-review. Keyed on subtype+action so switching mode refetches even
-   * while the drawer stays open. */
+   * Submit-for-review. Keyed on subtype+action (+ the picked framework, which the
+   * form is read for) so switching mode or framework refetches while the drawer stays open. */
+  // Dynamic Assess keeps reading the form of the content's saved framework, as before.
+  const formFw = ed.isDynamicAssess ? (content?.framework ?? framework) : (selectedFw || content?.framework || framework);
   useEffect(() => {
     const subtype = content?.primaryCategory ?? content?.contentType ?? '';
     const action: 'save' | 'review' = reviewSubmitMode ? 'review' : 'save';
-    const key = `${subtype}:${action}`;
+    const key = `${subtype}:${action}:${formFw ?? ''}`;
     if (!open || !subtype || loadedFormKey.current === key) return;
     loadedFormKey.current = key;
     service
       .readFormFields(subtype, action, {
-        framework: content?.framework ?? framework,
+        framework: formFw,
         rootOrgId: ed.rootOrgId ?? ed.context.channel,
       })
       .then((f) => setFormFields(f.length ? f : FALLBACK_FIELDS))
       .catch(() => setFormFields(FALLBACK_FIELDS));
-  }, [open, content, reviewSubmitMode, service, framework, ed.rootOrgId, ed.context.channel]);
+  }, [open, content, reviewSubmitMode, service, formFw, ed.rootOrgId, ed.context.channel]);
 
-  /* Visible, render-ordered fields. */
+  /* Visible, render-ordered fields, fitted to the picked framework's categories (Dynamic Assess keeps its own form as is). */
   const fields = useMemo(() => {
-    const src = formFields.length ? formFields : FALLBACK_FIELDS;
-    return src.filter((f) => f.visible !== false);
-  }, [formFields]);
+    const src = (formFields.length ? formFields : FALLBACK_FIELDS).filter((f) => f.visible !== false);
+    return ed.isDynamicAssess ? src : adaptFieldsToFramework(src, categories, seenCategoryCodes.current);
+  }, [formFields, categories, ed.isDynamicAssess]);
 
   /* Taxonomy category codes come from the framework, not a hardcoded list. */
   const taxoCodes = useMemo(() => new Set(categories.map((c) => c.code)), [categories]);
@@ -310,11 +333,12 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   /* Seed values from content once the field set is known — string fields into
      `values`, multiselect fields into `multiVals`, driven by the form definition. */
   useEffect(() => {
-    if (!open) { seededRef.current = null; return; } // reset so the next open re-seeds
+    if (!open) { seededRef.current = null; seededCodes.current = new Set(); return; } // reset so the next open re-seeds
     if (!content) return;
     // Seed once per open-session; a later async form-fields load must not clobber user typing.
     if (seededRef.current === content.identifier) return;
     seededRef.current = content.identifier;
+    seededCodes.current = new Set(fields.map((f) => f.code));
     const vals: Record<string, string> = {
       name: content.name ?? '',
       description: content.description ?? '',
@@ -335,6 +359,25 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
     setValues(vals);
     setMultiVals(multi);
     setAppIcon(content.appIcon);
+  }, [open, content, fields]);
+
+  /* Seeds the category fields a framework adds after the first seed (its categories load later, or the author
+     switched framework) from the content, once each; values already in play are left alone. */
+  useEffect(() => {
+    if (!open || !content || seededRef.current !== content.identifier || ed.isDynamicAssess) return;
+    const fresh = fields.filter((f) => taxoCodes.has(f.code) && !seededCodes.current.has(f.code));
+    if (!fresh.length) return;
+    const vals: Record<string, string> = {};
+    const multi: Record<string, string[]> = {};
+    for (const f of fresh) {
+      seededCodes.current.add(f.code);
+      const cv = (content as Record<string, unknown>)[f.code];
+      if (isMultiField(f)) multi[f.code] = Array.isArray(cv) ? cv.map(String) : cv != null && cv !== '' ? [String(cv)] : [];
+      else vals[f.code] = Array.isArray(cv) ? String(cv[0] ?? '') : cv != null ? String(cv) : '';
+    }
+    setValues((s) => ({ ...vals, ...s }));
+    setMultiVals((s) => ({ ...multi, ...s }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, content, fields]);
 
   /* Seeds difficultyTarget and skill once they appear (form-only fields, absent from FALLBACK_FIELDS); safe since neither is rendered before then. */
@@ -383,7 +426,16 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
 
   /** A new framework means different category terms, so clear skill and every category value picked under the old one. */
   const onFrameworkChange = (fw: string) => {
+    if (fw === selectedFw) return;
     const codes = [...categories.map((c) => c.code), 'skill'];
+    if (!ed.isDynamicAssess) {
+      // The old framework's terms are written empty on save (unless the new one shares the category), so they don't linger.
+      const multiOf = new Map(fields.map((f) => [f.code, isMultiField(f)]));
+      setStaleCategories((s) => ({
+        ...s,
+        ...Object.fromEntries(categories.map((c) => [c.code, multiOf.get(c.code) ?? true])),
+      }));
+    }
     setSelectedFw(fw);
     setCategories([]);
     loadedFw.current = null; // otherwise re-picking the original framework (or the placeholder) never reloads its categories
@@ -442,6 +494,13 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
     }
     if (appIcon) out.appIcon = appIcon;
     if (ed.isDynamicAssess && selectedFw) out.framework = selectedFw;
+    else if (selectedFw && selectedFw !== content?.framework) {
+      out.framework = selectedFw;
+      // Categories of a framework switched away from, that the picked one doesn't have: list fields as [], single ones removed.
+      for (const [code, multi] of Object.entries(staleCategories)) {
+        if (!taxoCodes.has(code) && !(code in out)) out[code] = multi ? [] : null;
+      }
+    }
     // Skill tags are only written once the creator touches them, so other edits never rewrite them.
     if (tagsSkills && skillDirty && skillFw) {
       out[SKILL_FRAMEWORK_FIELD] = skillFw;
@@ -522,6 +581,32 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   const onClose = () => { setReviewErrors([]); setReviewSubmitMode(false); setDrawer(null); };
 
   /* Renders a single form field by its inputType. */
+  /** The taxonomy framework picker; the current framework stays selectable even if it isn't in the fetched list. */
+  const renderFrameworkPicker = (disabled = false) => {
+    const fwList = selectedFw && !fwOptions.some((o) => o.identifier === selectedFw)
+      ? [{ identifier: selectedFw, name: selectedFw }, ...fwOptions]
+      : fwOptions;
+    return (
+      <div className="ce-field-full">
+        <label className="ce-label-sm" htmlFor="ce-framework-picker">{t(lang, 'DYNAMIC_ASSESS_FRAMEWORK')}</label>
+        <div className="ce-select-wrap" style={{ maxWidth: 'none' }}>
+          <select
+            id="ce-framework-picker"
+            className="ce-select ce-select-sm"
+            value={selectedFw}
+            disabled={disabled}
+            onChange={(e) => onFrameworkChange(e.target.value)}
+          >
+            {/* Only Dynamic Assess may go back to no framework; other content always has one. */}
+            <option value="" disabled={!ed.isDynamicAssess && !!selectedFw}>{t(lang, 'DYNAMIC_ASSESS_SELECT_FRAMEWORK')}</option>
+            {fwList.map((o) => <option key={o.identifier} value={o.identifier}>{o.name}</option>)}
+          </select>
+          <span className="ce-select-chevron"><ChevronDown size={12} /></span>
+        </div>
+      </div>
+    );
+  };
+
   const renderField = (f: FormField) => {
     const code = f.code;
     const label = f.label ?? f.name ?? code;
@@ -554,30 +639,9 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
     }
 
     if (ed.isDynamicAssess && isSkillField(f)) {
-      // Current framework stays selectable even if it isn't in the system-default search results.
-      const fwList = selectedFw && !fwOptions.some((o) => o.identifier === selectedFw)
-        ? [{ identifier: selectedFw, name: selectedFw }, ...fwOptions]
-        : fwOptions;
       return (
         <React.Fragment key={code}>
-          {ed.isDynamicAssess && (
-            <div className="ce-field-full">
-              <label className="ce-label-sm" htmlFor="ce-framework-picker">{t(lang, 'DYNAMIC_ASSESS_FRAMEWORK')}</label>
-              <div className="ce-select-wrap" style={{ maxWidth: 'none' }}>
-                <select
-                  id="ce-framework-picker"
-                  className="ce-select ce-select-sm"
-                  value={selectedFw}
-                  disabled={disabled}
-                  onChange={(e) => onFrameworkChange(e.target.value)}
-                >
-                  <option value="">{t(lang, 'DYNAMIC_ASSESS_SELECT_FRAMEWORK')}</option>
-                  {fwList.map((o) => <option key={o.identifier} value={o.identifier}>{o.name}</option>)}
-                </select>
-                <span className="ce-select-chevron"><ChevronDown size={12} /></span>
-              </div>
-            </div>
-          )}
+          {renderFrameworkPicker(disabled)}
           <MultiSelect
             label={skillCategoryLabel ?? label}
             placeholder={skillCategoryCode ? (placeholder || `Select ${skillCategoryLabel ?? label}`) : t(lang, 'DYNAMIC_ASSESS_SELECT_FRAMEWORK_FIRST')}
@@ -727,6 +791,8 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
           {nonTaxoFields.map(renderField)}
         </div>
       </div>
+
+      {!ed.isDynamicAssess && renderFrameworkPicker()}
 
       {taxoFields.length > 0 && (
         <div className="ce-taxo-grid">

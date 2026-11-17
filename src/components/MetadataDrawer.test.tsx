@@ -71,7 +71,87 @@ describe('<MetadataDrawer />', () => {
     render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service, isDynamicAssess: false, content: { ...mockContent, primaryCategory: 'Learning Resource' } })} />);
     expect(await screen.findByText('Skill')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Select Skill/ })).toBeNull();
-    expect(screen.queryByText('Framework')).toBeNull();
+    // Any content may pick its taxonomy framework now; that picker is not the Dynamic Assess skill picker.
+    expect(screen.getByLabelText('Framework')).toBeInTheDocument();
+  });
+
+  describe('taxonomy framework picker (any content)', () => {
+    const usf = [
+      { code: 'industry', name: 'Industry', index: 1, terms: [{ code: 'it', name: 'IT' }] },
+      { code: 'domain', name: 'Domain', index: 2, terms: [{ code: 'sd', name: 'Software' }] },
+    ];
+    const ncf = [
+      { code: 'subject', name: 'Subject', index: 2, terms: [{ code: 'm', name: 'Maths' }] },
+      { code: 'board', name: 'Board', index: 1, terms: [{ code: 'cbse', name: 'CBSE' }] },
+    ];
+    const content = { ...mockContent, primaryCategory: 'Explanation Content', framework: 'USF', industry: 'IT', domain: ['Software'] };
+    const service = (over: Record<string, unknown> = {}) => mockService({
+      // One form for every framework, as ed-dev serves: it only knows USF's categories.
+      readFormFields: vi.fn().mockResolvedValue([
+        { code: 'name', inputType: 'text', label: 'Title', required: true, visible: true, editable: true },
+        { code: 'industry', inputType: 'select', label: 'Industry', visible: true, editable: true },
+        { code: 'domain', inputType: 'multiSelect', label: 'Domain', visible: true, editable: true },
+      ]),
+      readFramework: vi.fn(async (fw: string) => (fw === 'NCF' ? ncf : usf)),
+      readChannelFrameworks: vi.fn().mockResolvedValue([{ identifier: 'NCF', name: 'CBSE' }, { identifier: 'USF', name: 'USF' }]),
+      ...over,
+    });
+
+    it('offers the channel\'s frameworks, starting on the content\'s own (positive)', async () => {
+      const svc = service();
+      render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service: svc, content })} />);
+      const picker = await screen.findByLabelText('Framework') as HTMLSelectElement;
+      await waitFor(() => expect(picker.value).toBe('USF'));
+      expect(await screen.findByRole('option', { name: 'CBSE' })).toBeInTheDocument();
+      expect(svc.readChannelFrameworks).toHaveBeenCalledWith('ch1');
+      expect(svc.searchFrameworks).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the system-default frameworks when the channel lists none (negative)', async () => {
+      const svc = service({
+        readChannelFrameworks: vi.fn().mockResolvedValue([]),
+        searchFrameworks: vi.fn().mockResolvedValue([{ identifier: 'NCF', name: 'CBSE' }]),
+      });
+      render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service: svc, content })} />);
+      expect(await screen.findByRole('option', { name: 'CBSE' })).toBeInTheDocument();
+      expect(svc.searchFrameworks).toHaveBeenCalled();
+    });
+
+    it('swaps in the new framework\'s categories, even though the form only knows the old ones (positive)', async () => {
+      const svc = service();
+      render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service: svc, content })} />);
+      const picker = await screen.findByLabelText('Framework') as HTMLSelectElement;
+      expect(await screen.findByText('Industry')).toBeInTheDocument();
+      fireEvent.change(picker, { target: { value: 'NCF' } });
+      expect(await screen.findByText('Board')).toBeInTheDocument();
+      expect(screen.getByText('Subject')).toBeInTheDocument();
+      expect(screen.queryByText('Industry')).not.toBeInTheDocument();
+      expect(screen.queryByText('Domain')).not.toBeInTheDocument();
+      await waitFor(() => expect(svc.readFormFields).toHaveBeenCalledWith('Explanation Content', 'save', expect.objectContaining({ framework: 'NCF' })));
+    });
+
+    it('saves the new framework and empties the old one\'s categories (positive)', async () => {
+      const saveMetadata = vi.fn();
+      render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service: service(), saveMetadata, content })} />);
+      const picker = await screen.findByLabelText('Framework') as HTMLSelectElement;
+      expect(await screen.findByText('Industry')).toBeInTheDocument();
+      fireEvent.change(picker, { target: { value: 'NCF' } });
+      expect(await screen.findByText('Board')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+      await waitFor(() => expect(saveMetadata).toHaveBeenCalled());
+      expect(saveMetadata.mock.calls[0][0]).toEqual(expect.objectContaining({ framework: 'NCF', industry: null, domain: [] }));
+    });
+
+    it('leaves framework and categories out of the save when the framework is unchanged (negative)', async () => {
+      const saveMetadata = vi.fn();
+      render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service: service(), saveMetadata, content })} />);
+      expect(await screen.findByText('Industry')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+      await waitFor(() => expect(saveMetadata).toHaveBeenCalled());
+      const out = saveMetadata.mock.calls[0][0];
+      expect(out).not.toHaveProperty('framework');
+      expect(out).toEqual(expect.objectContaining({ industry: 'IT', domain: ['Software'] }));
+    });
   });
 
   describe('difficultyTarget (Dynamic Assess)', () => {

@@ -30,6 +30,8 @@ const DEFAULT_ENDPOINTS = {
   enrichmentList: 'object/enrichment/v4/list',
   /* Skill (competency) framework read; like the enrichment list, only the gateway serves it. */
   competencyFrameworkRead: 'competency-framework/v3/read',
+  /* Channel read (its framework list); knowledge-mw has no /action route for it, so it goes through the gateway too. */
+  channelRead: 'channel/v1/read',
   /* Dynamic Assess — triggers the knowlg-publish job's pool-based question selection. */
   refreshBody: 'content/v3/refresh/body',
 } as const;
@@ -463,6 +465,16 @@ export class ContentEditorService {
       channel ? { headers: { 'X-Channel-Id': channel } } : undefined,
     );
     return (result?.Framework ?? [])
+      .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? '') }))
+      .filter((f) => f.identifier);
+  }
+
+  /** The channel's own frameworks (channel/v1/read), the same list the course editor's "Course Type" offers. */
+  async readChannelFrameworks(channel: string): Promise<Array<{ identifier: string; name: string }>> {
+    const url = `${this.baseUrl}${this.portalSlug}/${this.ep.channelRead}/${encodeURIComponent(channel)}`;
+    const resp = await this.fetchImpl(url, { method: 'GET', headers: this.headers, credentials: 'same-origin' });
+    const data = await this.readEnvelope<{ result?: { channel?: { frameworks?: Array<Record<string, unknown>> } } }>(resp, url);
+    return (data.result?.channel?.frameworks ?? [])
       .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? '') }))
       .filter((f) => f.identifier);
   }

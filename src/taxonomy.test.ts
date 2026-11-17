@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { cascadedOptions, categoryTerms, deepestCategoryCode } from './taxonomy';
-import type { FrameworkCategory } from './types';
+import { adaptFieldsToFramework, cascadedOptions, categoryTerms, deepestCategoryCode } from './taxonomy';
+import type { FormField, FrameworkCategory } from './types';
 
 const categories: FrameworkCategory[] = [
   {
@@ -68,5 +68,41 @@ describe('deepestCategoryCode', () => {
 
   it('is undefined before the framework has loaded (negative)', () => {
     expect(deepestCategoryCode([])).toBeUndefined();
+  });
+});
+
+describe('adaptFieldsToFramework', () => {
+  const form: FormField[] = [
+    { code: 'name', inputType: 'text' },
+    { code: 'industry', inputType: 'select' },
+    { code: 'domain', inputType: 'multiSelect' },
+  ];
+  const ncf: FrameworkCategory[] = [
+    { code: 'subject', name: 'Subject', index: 2, terms: [] },
+    { code: 'board', name: 'Board', index: 1, terms: [] },
+  ];
+
+  it('drops the categories the framework lacks and adds its own, the first single-select (positive)', () => {
+    const out = adaptFieldsToFramework(form, ncf);
+    expect(out.map((f) => f.code)).toEqual(['name', 'board', 'subject']);
+    expect(out.find((f) => f.code === 'board')).toMatchObject({ inputType: 'select', label: 'Board', editable: true });
+    expect(out.find((f) => f.code === 'subject')).toMatchObject({ inputType: 'multiSelect', label: 'Subject' });
+  });
+
+  it('keeps the form\'s own field for a category the framework has (positive)', () => {
+    const usf: FrameworkCategory[] = [
+      { code: 'industry', name: 'Industry', index: 1, terms: [] },
+      { code: 'domain', name: 'Domain', index: 2, terms: [] },
+    ];
+    expect(adaptFieldsToFramework(form, usf)).toEqual(form);
+  });
+
+  it('leaves the fields alone until the categories load (negative)', () => {
+    expect(adaptFieldsToFramework(form, [])).toBe(form);
+  });
+
+  it('keeps form fields that aren\'t categories at all (negative)', () => {
+    const withLicense: FormField[] = [...form, { code: 'license', inputType: 'select' }];
+    expect(adaptFieldsToFramework(withLicense, ncf).map((f) => f.code)).toContain('license');
   });
 });

@@ -515,7 +515,9 @@ export class ContentEditorService {
     const result = await this.request<{ CompetencyFramework?: Array<Record<string, unknown>> }>(
       'POST',
       this.ep.compositeSearch,
-      { request: { filters: { objectType: ['CompetencyFramework'], status: ['Live'] }, fields: ['identifier', 'name'], limit: 100, sort_by: { name: 'asc' } } },
+      // Filter by channel, as the course editor does: the X-Channel-Id header alone doesn't narrow the search, so
+      // another channel's skill frameworks would be offered too.
+      { request: { filters: { objectType: ['CompetencyFramework'], status: ['Live'], ...(channel ? { channel: [channel] } : {}) }, fields: ['identifier', 'name'], limit: 100, sort_by: { name: 'asc' } } },
       channel ? { headers: { 'X-Channel-Id': channel } } : undefined,
     );
     return (result?.CompetencyFramework ?? [])

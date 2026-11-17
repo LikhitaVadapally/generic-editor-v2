@@ -425,8 +425,17 @@ describe('ContentEditorService skill frameworks', () => {
     expect(list).toEqual([{ identifier: 'fw_agro', name: 'Agro' }]);
     expect(calls[0]?.url).toBe('/action/composite/v3/search');
     const body = JSON.parse(String(calls[0]?.init?.body));
-    expect(body.request.filters).toEqual({ objectType: ['CompetencyFramework'], status: ['Live'] });
+    // Filtered by channel, as the course editor does; the header alone doesn't narrow the search.
+    expect(body.request.filters).toEqual({ objectType: ['CompetencyFramework'], status: ['Live'], channel: ['ch1'] });
     expect((calls[0]?.init?.headers as Record<string, string>)['X-Channel-Id']).toBe('ch1');
+  });
+
+  it('leaves the channel filter off when no channel is known (negative)', async () => {
+    const calls = await withFetch({ CompetencyFramework: [] }, async (svc) => {
+      await svc.searchCompetencyFrameworks();
+    });
+    const body = JSON.parse(String(calls[0]?.init?.body));
+    expect(body.request.filters).toEqual({ objectType: ['CompetencyFramework'], status: ['Live'] });
   });
 
   it('reads a skill framework through the gateway, not /action', async () => {

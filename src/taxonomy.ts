@@ -88,3 +88,33 @@ export function adaptFieldsToFramework(
     }));
   return [...kept, ...added];
 }
+
+export interface FrameworkOption {
+  identifier: string;
+  name: string;
+  type?: string;
+}
+
+/**
+ * Options for the content "Framework" picker, built the way the course editor's "Course Type" is
+ * (collection-editor-v2 useFrameworkOptions, after Angular's getFrameworkDetails):
+ *  - with allowed types (`orgFWType`), keep the channel frameworks of those types, and add the
+ *    system-default frameworks (`typed`) of any allowed type the channel list doesn't cover;
+ *  - with none, offer the channel's frameworks as they are.
+ * Competency frameworks attached to the channel have their own type, so they drop out here.
+ */
+export function taxonomyFrameworkOptions(
+  channelFrameworks: FrameworkOption[],
+  orgFWType: string[],
+  typed: FrameworkOption[],
+): FrameworkOption[] {
+  if (!orgFWType.length) return channelFrameworks;
+  const channelTypes = new Set(channelFrameworks.map((f) => f.type).filter(Boolean) as string[]);
+  const missing = new Set(orgFWType.filter((t) => !channelTypes.has(t)));
+  const merged = [
+    ...typed.filter((f) => f.type && missing.has(f.type)),
+    ...channelFrameworks.filter((f) => f.type && orgFWType.includes(f.type)),
+  ];
+  const seen = new Set<string>();
+  return merged.filter((f) => (seen.has(f.identifier) ? false : (seen.add(f.identifier), true)));
+}

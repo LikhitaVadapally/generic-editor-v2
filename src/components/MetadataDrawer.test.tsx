@@ -117,6 +117,37 @@ describe('<MetadataDrawer />', () => {
       expect(svc.searchFrameworks).toHaveBeenCalled();
     });
 
+    it('offers what a course\'s Course Type does: the allowed types\' frameworks, not the channel\'s competency ones (positive)', async () => {
+      const svc = service({
+        readChannelFrameworks: vi.fn().mockResolvedValue([
+          { identifier: 'NCF', name: 'CBSE' }, { identifier: 'USF', name: 'USF' }, { identifier: 'fw_health_competency7', name: 'Health Competency Framework 7' },
+        ]),
+        // The content category declares no types, so Course's stand in.
+        readOrgFrameworkTypes: vi.fn(async (name: string) => (name === 'Course' ? ['K-12', 'TPD'] : [])),
+        searchFrameworksByType: vi.fn().mockResolvedValue([
+          { identifier: 'NCF', name: 'CBSE', type: 'K-12' }, { identifier: 'USF', name: 'USF', type: 'K-12' }, { identifier: 'TPD', name: 'TPD', type: 'TPD' },
+        ]),
+      });
+      render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service: svc, content: { ...content, primaryCategory: 'Explanation Content' } })} />);
+      expect(await screen.findByRole('option', { name: 'TPD' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'CBSE' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'Health Competency Framework 7' })).not.toBeInTheDocument();
+      expect(svc.readOrgFrameworkTypes).toHaveBeenCalledWith('Explanation Content', 'Content', 'ch1');
+      expect(svc.readOrgFrameworkTypes).toHaveBeenCalledWith('Course', 'Collection', 'ch1');
+      expect(svc.searchFrameworksByType).toHaveBeenCalledWith(['K-12', 'TPD'], 'ch1');
+    });
+
+    it('uses the content category\'s own allowed types when it declares them (positive)', async () => {
+      const svc = service({
+        readOrgFrameworkTypes: vi.fn(async (name: string) => (name === 'Explanation Content' ? ['K-12'] : ['TPD'])),
+        searchFrameworksByType: vi.fn().mockResolvedValue([{ identifier: 'NCF', name: 'CBSE', type: 'K-12' }]),
+      });
+      render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service: svc, content: { ...content, primaryCategory: 'Explanation Content' } })} />);
+      expect(await screen.findByRole('option', { name: 'CBSE' })).toBeInTheDocument();
+      expect(svc.readOrgFrameworkTypes).not.toHaveBeenCalledWith('Course', 'Collection', 'ch1');
+      expect(svc.searchFrameworksByType).toHaveBeenCalledWith(['K-12'], 'ch1');
+    });
+
     it('swaps in the new framework\'s categories, even though the form only knows the old ones (positive)', async () => {
       const svc = service();
       render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service: svc, content })} />);

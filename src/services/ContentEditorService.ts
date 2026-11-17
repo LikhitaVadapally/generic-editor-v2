@@ -32,6 +32,8 @@ const DEFAULT_ENDPOINTS = {
   competencyFrameworkRead: 'competency-framework/v3/read',
   /* Channel read (its framework list); knowledge-mw has no /action route for it, so it goes through the gateway too. */
   channelRead: 'channel/v1/read',
+  /* Object category definition; its frameworkMetadata.orgFWType names the framework types a category may use. */
+  categoryDefinitionRead: 'object/category/definition/v1/read',
   /* Dynamic Assess — triggers the knowlg-publish job's pool-based question selection. */
   refreshBody: 'content/v3/refresh/body',
 } as const;
@@ -470,12 +472,41 @@ export class ContentEditorService {
   }
 
   /** The channel's own frameworks (channel/v1/read), the same list the course editor's "Course Type" offers. */
-  async readChannelFrameworks(channel: string): Promise<Array<{ identifier: string; name: string }>> {
+  async readChannelFrameworks(channel: string): Promise<Array<{ identifier: string; name: string; type?: string }>> {
     const url = `${this.baseUrl}${this.portalSlug}/${this.ep.channelRead}/${encodeURIComponent(channel)}`;
     const resp = await this.fetchImpl(url, { method: 'GET', headers: this.headers, credentials: 'same-origin' });
     const data = await this.readEnvelope<{ result?: { channel?: { frameworks?: Array<Record<string, unknown>> } } }>(resp, url);
     return (data.result?.channel?.frameworks ?? [])
-      .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? '') }))
+      .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? ''), type: f.type ? String(f.type) : undefined }))
+      .filter((f) => f.identifier);
+  }
+
+  /**
+   * The framework types (`frameworkMetadata.orgFWType`, e.g. K-12, TPD) an object category may use, from its category
+   * definition. Empty when the category declares none or its definition can't be read.
+   */
+  async readOrgFrameworkTypes(categoryName: string, objectType: string, channel?: string): Promise<string[]> {
+    type DefResp = { objectCategoryDefinition?: { objectMetadata?: { config?: { frameworkMetadata?: { orgFWType?: unknown } } } } };
+    const result = await this.request<DefResp>(
+      'POST',
+      `${this.ep.categoryDefinitionRead}?fields=objectMetadata`,
+      { request: { objectCategoryDefinition: { objectType, name: categoryName, ...(channel ? { channel } : {}) } } },
+    );
+    const types = result?.objectCategoryDefinition?.objectMetadata?.config?.frameworkMetadata?.orgFWType;
+    return Array.isArray(types) ? types.map(String).filter(Boolean) : [];
+  }
+
+  /** Live system-default frameworks of the given types, with their type, channel-scoped via X-Channel-Id. */
+  async searchFrameworksByType(types: string[], channel?: string): Promise<Array<{ identifier: string; name: string; type?: string }>> {
+    if (!types.length) return [];
+    const result = await this.request<{ Framework?: Array<Record<string, unknown>> }>(
+      'POST',
+      this.ep.compositeSearch,
+      { request: { filters: { objectType: 'Framework', status: ['Live'], systemDefault: 'Yes', type: types }, fields: ['identifier', 'name', 'type'] } },
+      channel ? { headers: { 'X-Channel-Id': channel } } : undefined,
+    );
+    return (result?.Framework ?? [])
+      .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? ''), type: f.type ? String(f.type) : undefined }))
       .filter((f) => f.identifier);
   }
 

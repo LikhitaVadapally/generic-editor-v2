@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { adaptFieldsToFramework, cascadedOptions, categoryTerms, deepestCategoryCode } from './taxonomy';
+import { adaptFieldsToFramework, cascadedOptions, categoryTerms, deepestCategoryCode, taxonomyFrameworkOptions } from './taxonomy';
 import type { FormField, FrameworkCategory } from './types';
 
 const categories: FrameworkCategory[] = [
@@ -104,5 +104,38 @@ describe('adaptFieldsToFramework', () => {
   it('keeps form fields that aren\'t categories at all (negative)', () => {
     const withLicense: FormField[] = [...form, { code: 'license', inputType: 'select' }];
     expect(adaptFieldsToFramework(withLicense, ncf).map((f) => f.code)).toContain('license');
+  });
+});
+
+describe('taxonomyFrameworkOptions', () => {
+  const channel = [
+    { identifier: 'NCF', name: 'CBSE' },
+    { identifier: 'USF', name: 'USF' },
+    { identifier: 'fw_health_competency7', name: 'HC7' },
+  ];
+
+  it('offers the channel list unchanged when no types are allowed (negative)', () => {
+    expect(taxonomyFrameworkOptions(channel, [], [])).toEqual(channel);
+  });
+
+  it('takes the allowed types from the system-default search when the channel list carries no types (positive)', () => {
+    const typed = [{ identifier: 'NCF', name: 'CBSE', type: 'K-12' }, { identifier: 'TPD', name: 'TPD', type: 'TPD' }];
+    expect(taxonomyFrameworkOptions(channel, ['K-12', 'TPD'], typed).map((f) => f.identifier)).toEqual(['NCF', 'TPD']);
+  });
+
+  it('keeps typed channel frameworks of an allowed type and drops the rest (positive)', () => {
+    const typedChannel = [
+      { identifier: 'NCF', name: 'CBSE', type: 'K-12' },
+      { identifier: 'fw_health_competency7', name: 'HC7', type: 'Competency' },
+    ];
+    const typed = [{ identifier: 'TPD', name: 'TPD', type: 'TPD' }, { identifier: 'USF', name: 'USF', type: 'K-12' }];
+    // K-12 is covered by the channel, so only TPD comes from the search.
+    expect(taxonomyFrameworkOptions(typedChannel, ['K-12', 'TPD'], typed).map((f) => f.identifier)).toEqual(['TPD', 'NCF']);
+  });
+
+  it('lists a framework once even if both sources have it (negative)', () => {
+    const typedChannel = [{ identifier: 'NCF', name: 'CBSE', type: 'K-12' }];
+    const typed = [{ identifier: 'NCF', name: 'CBSE', type: 'TPD' }];
+    expect(taxonomyFrameworkOptions(typedChannel, ['K-12', 'TPD'], typed).map((f) => f.identifier)).toEqual(['NCF']);
   });
 });

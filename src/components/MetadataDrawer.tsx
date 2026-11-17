@@ -6,7 +6,7 @@ import { SKILL_FRAMEWORK_FIELD, asCodes, useSkillFramework } from '../skillTaggi
 import type { EditorController } from '../useEditor';
 import type { FormField, FrameworkCategory } from '../types';
 import { t, tf } from '../i18n/i18n';
-import { KNOWN_CATEGORY_CODES, adaptFieldsToFramework, cascadedOptions, deepestCategoryCode } from '../taxonomy';
+import { KNOWN_CATEGORY_CODES, adaptFieldsToFramework, cascadedOptions, deepestCategoryCode, taxonomyFrameworkOptions } from '../taxonomy';
 import { PencilIcon, ChevronDown, ImageIcon, CheckIcon } from '../icons';
 import { type DifficultyTarget, toDifficultyTarget, serializeDifficultyTarget } from '../difficultyTarget';
 import { dynamicAssessSettings, needsGeneration } from '../dynamicAssessDraw';
@@ -202,6 +202,7 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   const [checking, setChecking] = useState(false);
   const [fwOptions, setFwOptions] = useState<Array<{ identifier: string; name: string }>>([]);
   const contentChannel = (content as Record<string, unknown> | null)?.channel as string | undefined;
+  const contentCategory = String((content as Record<string, unknown> | null)?.primaryCategory ?? '');
   /* Skill tagging (not Dynamic Assess, whose skill picker means something else): the skill framework and its picked skill codes. */
   const tagsSkills = !ed.isDynamicAssess;
   const [skillFw, setSkillFw] = useState('');
@@ -233,15 +234,25 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   useEffect(() => {
     if (!open) return;
     const channel = contentChannel ?? ed.context.channel;
-    // Dynamic Assess keeps its system-default list; other content offers the channel's own frameworks, as a course's
-    // "Course Type" does, falling back to the system-default list when the channel names none.
-    const load = ed.isDynamicAssess
-      ? service.searchFrameworks(channel)
-      : service.readChannelFrameworks(channel)
-        .catch(() => [])
-        .then((list) => (list.length ? list : service.searchFrameworks(channel)));
+    // Dynamic Assess keeps its system-default list. Other content gets the list a course's "Course Type" shows: the
+    // channel's frameworks narrowed to the types its category allows (orgFWType). Content categories rarely declare
+    // any, so Course's types stand in; without that the channel's competency frameworks would be offered too.
+    const category = contentCategory;
+    const allowedTypes = async (): Promise<string[]> => {
+      const own = category ? await service.readOrgFrameworkTypes(category, 'Content', channel).catch(() => []) : [];
+      return own.length ? own : service.readOrgFrameworkTypes('Course', 'Collection', channel).catch(() => []);
+    };
+    const loadTaxonomy = async () => {
+      const [list, types] = await Promise.all([service.readChannelFrameworks(channel).catch(() => []), allowedTypes()]);
+      const channelTypes = new Set(list.map((f) => f.type).filter(Boolean));
+      const missing = types.filter((t) => !channelTypes.has(t));
+      const typed = missing.length ? await service.searchFrameworksByType(missing, channel).catch(() => []) : [];
+      const opts = taxonomyFrameworkOptions(list, types, typed);
+      return opts.length ? opts : service.searchFrameworks(channel);
+    };
+    const load = ed.isDynamicAssess ? service.searchFrameworks(channel) : loadTaxonomy();
     load.then(setFwOptions).catch(() => setFwOptions([]));
-  }, [open, ed.isDynamicAssess, service, contentChannel, ed.context.channel]);
+  }, [open, ed.isDynamicAssess, service, contentChannel, ed.context.channel, contentCategory]);
 
   useEffect(() => {
     if (!open || !tagsSkills) return;

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from '../icons';
 
-/** Checkbox popover for multi-value taxonomy fields (medium, class, subject). */
+/** Checkbox popover for multi-value fields: taxonomy categories (medium, class, subject) and skills. */
 const MultiSelect: React.FC<{
   label: string; placeholder: string; values: string[]; required?: boolean; disabled?: boolean;
   options: { code: string; name: string }[]; onChange: (v: string[]) => void;
@@ -16,8 +16,8 @@ const MultiSelect: React.FC<{
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
-  const toggle = (name: string) =>
-    onChange(values.includes(name) ? values.filter((v) => v !== name) : [...values, name]);
+  const toggle = (value: string) =>
+    onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
   const nameOf = (v: string) => (valueKey === 'code' ? options.find((o) => o.code === v)?.name ?? v : v);
   const summary = values.length ? values.map(nameOf).join(', ') : placeholder;
   return (

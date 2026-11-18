@@ -203,6 +203,8 @@ export const TRANSLATIONS_HI: Record<string, string> = {
   DYNAMIC_ASSESS_GENERATE_FIRST: 'समीक्षा के लिए भेजने से पहले प्रश्न तैयार करें',
   DYNAMIC_ASSESS_EMPTY_TITLE: 'अभी तक कोई प्रश्न तैयार नहीं हुआ',
   DYNAMIC_ASSESS_EMPTY_SUB: 'विवरण संपादित करें खोलें, कौशल और कठिनाई लक्ष्य सेट करें, और प्रश्न तैयार करने के लिए सहेजें।',
+  CONTENT_FRAMEWORK: 'फ्रेमवर्क',
+  SELECT_CONTENT_FRAMEWORK: 'फ्रेमवर्क चुनें',
   DYNAMIC_ASSESS_FRAMEWORK: 'फ्रेमवर्क',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK: 'फ्रेमवर्क चुनें',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK_FIRST: 'पहले फ्रेमवर्क चुनें',

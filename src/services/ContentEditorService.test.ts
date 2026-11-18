@@ -453,3 +453,68 @@ describe('ContentEditorService skill frameworks', () => {
     expect(cats).toEqual([]);
   });
 });
+
+describe('ContentEditorService taxonomy frameworks', () => {
+  const withFetch = async (reply: unknown, run: (svc: ContentEditorService) => Promise<void>) => {
+    const savedFetch = globalThis.fetch;
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ responseCode: 'OK', result: reply }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      await run(new ContentEditorService());
+    } finally {
+      globalThis.fetch = savedFetch;
+    }
+    return calls;
+  };
+  const bodyOf = (calls: Array<{ init?: RequestInit }>) => JSON.parse(String(calls[0]?.init?.body));
+
+  it("reads the channel's frameworks, with their type, through the gateway", async () => {
+    let list: unknown[] = [];
+    const calls = await withFetch(
+      { channel: { frameworks: [{ identifier: 'NCF', name: 'CBSE', type: 'K-12' }, { identifier: 'USF', name: 'USF' }, { name: 'no id' }] } },
+      async (svc) => { list = await svc.readChannelFrameworks('ch1'); },
+    );
+    expect(calls[0]?.url).toBe('/portal/channel/v1/read/ch1');
+    expect(list).toEqual([{ identifier: 'NCF', name: 'CBSE', type: 'K-12' }, { identifier: 'USF', name: 'USF' }]);
+  });
+
+  it("reads a category's allowed framework types from its definition", async () => {
+    let types: string[] = [];
+    const calls = await withFetch(
+      { objectCategoryDefinition: { objectMetadata: { config: { frameworkMetadata: { orgFWType: ['K-12', 'TPD'] } } } } },
+      async (svc) => { types = await svc.readOrgFrameworkTypes('Course', 'Collection', 'ch1'); },
+    );
+    expect(calls[0]?.url).toBe('/action/object/category/definition/v1/read?fields=objectMetadata');
+    expect(bodyOf(calls).request.objectCategoryDefinition).toEqual({ objectType: 'Collection', name: 'Course', channel: 'ch1' });
+    expect(types).toEqual(['K-12', 'TPD']);
+  });
+
+  it('finds no allowed types when the category declares none (negative)', async () => {
+    let types: string[] = ['x'];
+    await withFetch({ objectCategoryDefinition: { objectMetadata: {} } }, async (svc) => {
+      types = await svc.readOrgFrameworkTypes('Explanation Content', 'Content');
+    });
+    expect(types).toEqual([]);
+  });
+
+  it('searches system-default frameworks of the given types, asking for their type', async () => {
+    let list: unknown[] = [];
+    const calls = await withFetch({ Framework: [{ identifier: 'TPD', name: 'TPD', type: 'TPD' }] }, async (svc) => {
+      list = await svc.searchFrameworks('ch1', ['TPD']);
+    });
+    const body = bodyOf(calls);
+    expect(body.request.filters).toEqual({ objectType: 'Framework', status: ['Live'], systemDefault: 'Yes', type: ['TPD'] });
+    expect(body.request.fields).toEqual(['identifier', 'name', 'type']);
+    expect(list).toEqual([{ identifier: 'TPD', name: 'TPD', type: 'TPD' }]);
+  });
+
+  it('searches without a type filter when no types are given, and not at all for an empty list (negative)', async () => {
+    const calls = await withFetch({ Framework: [] }, async (svc) => { await svc.searchFrameworks('ch1'); });
+    expect(bodyOf(calls).request).toEqual({ filters: { objectType: 'Framework', status: ['Live'], systemDefault: 'Yes' } });
+    const none = await withFetch({ Framework: [] }, async (svc) => { expect(await svc.searchFrameworks('ch1', [])).toEqual([]); });
+    expect(none).toHaveLength(0);
+  });
+});

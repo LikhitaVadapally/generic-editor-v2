@@ -60,8 +60,8 @@ export const KNOWN_CATEGORY_CODES: ReadonlySet<string> = new Set([
 /**
  * Fits the form's fields to the chosen framework, the way the course editor's adaptFrameworkFields does.
  *
- * The content form is shared by every framework (ed-dev serves one `*` form carrying USF's fields), so a
- * content switched to CBSE would otherwise show Industry/Domain/Skill and none of its own categories.
+ * The content form can be shared by every framework (a `*` form carrying one framework's fields), so a
+ * content switched to another framework would otherwise show the old categories and none of its own.
  * Form fields for a category the framework lacks are dropped (`knownCategoryCodes` says which form fields
  * are categories at all); each framework category with no form field gets one, in `index` order. The
  * first category is single-select and the rest multiselect, which is how both K-12 (board) and USF
@@ -95,6 +95,12 @@ export interface FrameworkOption {
   type?: string;
 }
 
+/** Allowed framework types (`orgFWType`) that no channel framework covers, so they come from the system-default search. */
+export function missingFrameworkTypes(channelFrameworks: FrameworkOption[], orgFWType: string[]): string[] {
+  const channelTypes = new Set(channelFrameworks.map((f) => f.type).filter(Boolean));
+  return orgFWType.filter((t) => !channelTypes.has(t));
+}
+
 /**
  * Options for the content "Framework" picker, built the way the course editor's "Course Type" is
  * (collection-editor-v2 useFrameworkOptions, after Angular's getFrameworkDetails):
@@ -109,8 +115,7 @@ export function taxonomyFrameworkOptions(
   typed: FrameworkOption[],
 ): FrameworkOption[] {
   if (!orgFWType.length) return channelFrameworks;
-  const channelTypes = new Set(channelFrameworks.map((f) => f.type).filter(Boolean) as string[]);
-  const missing = new Set(orgFWType.filter((t) => !channelTypes.has(t)));
+  const missing = new Set(missingFrameworkTypes(channelFrameworks, orgFWType));
   const merged = [
     ...typed.filter((f) => f.type && missing.has(f.type)),
     ...channelFrameworks.filter((f) => f.type && orgFWType.includes(f.type)),

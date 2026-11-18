@@ -6,7 +6,7 @@ import { SKILL_FRAMEWORK_FIELD, asCodes, useSkillFramework } from '../skillTaggi
 import type { EditorController } from '../useEditor';
 import type { FormField, FrameworkCategory } from '../types';
 import { t, tf } from '../i18n/i18n';
-import { KNOWN_CATEGORY_CODES, adaptFieldsToFramework, cascadedOptions, deepestCategoryCode, taxonomyFrameworkOptions } from '../taxonomy';
+import { KNOWN_CATEGORY_CODES, adaptFieldsToFramework, cascadedOptions, deepestCategoryCode, missingFrameworkTypes, taxonomyFrameworkOptions } from '../taxonomy';
 import { PencilIcon, ChevronDown, ImageIcon, CheckIcon } from '../icons';
 import { type DifficultyTarget, toDifficultyTarget, serializeDifficultyTarget } from '../difficultyTarget';
 import { dynamicAssessSettings, needsGeneration } from '../dynamicAssessDraw';
@@ -17,6 +17,11 @@ import { planPool } from '../poolPlan';
  * is an array if the form marks it multiselect (or dataType 'list'), so any custom
  * taxonomy category the framework returns is handled dynamically.
  */
+/** A stored value as a multiselect's selection: a list of strings, empty when unset. */
+function toMultiValue(v: unknown): string[] {
+  return Array.isArray(v) ? v.map(String) : v != null && v !== '' ? [String(v)] : [];
+}
+
 function isMultiField(f: FormField, dynamicAssess = false): boolean {
   if (dynamicAssess && isSkillField(f)) return true;
   const it = (f.inputType ?? '').toLowerCase();
@@ -221,8 +226,6 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
     if (open) {
       setSelectedFw(String(content?.framework || framework || ''));
       setStaleCategories({});
-    }
-    if (open) {
       setSkillFw(String((content as Record<string, unknown> | null)?.[SKILL_FRAMEWORK_FIELD] ?? ''));
       setSkillCodes(null);
       setSkillDirty(false);
@@ -237,16 +240,14 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
     // Dynamic Assess keeps its system-default list. Other content gets the list a course's "Course Type" shows: the
     // channel's frameworks narrowed to the types its category allows (orgFWType). Content categories rarely declare
     // any, so Course's types stand in; without that the channel's competency frameworks would be offered too.
-    const category = contentCategory;
     const allowedTypes = async (): Promise<string[]> => {
-      const own = category ? await service.readOrgFrameworkTypes(category, 'Content', channel).catch(() => []) : [];
+      const own = contentCategory ? await service.readOrgFrameworkTypes(contentCategory, 'Content', channel).catch(() => []) : [];
       return own.length ? own : service.readOrgFrameworkTypes('Course', 'Collection', channel).catch(() => []);
     };
     const loadTaxonomy = async () => {
       const [list, types] = await Promise.all([service.readChannelFrameworks(channel).catch(() => []), allowedTypes()]);
-      const channelTypes = new Set(list.map((f) => f.type).filter(Boolean));
-      const missing = types.filter((t) => !channelTypes.has(t));
-      const typed = missing.length ? await service.searchFrameworksByType(missing, channel).catch(() => []) : [];
+      const missing = missingFrameworkTypes(list, types);
+      const typed = missing.length ? await service.searchFrameworks(channel, missing).catch(() => []) : [];
       const opts = taxonomyFrameworkOptions(list, types, typed);
       return opts.length ? opts : service.searchFrameworks(channel);
     };
@@ -277,23 +278,22 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
   /* Framework categories for taxonomy cascade. */
   useEffect(() => {
     // Follows the picker alone, so choosing Dynamic Assess's placeholder leaves Skill without options.
-    const fw = selectedFw;
-    if (!open || !fw || loadedFw.current === fw) return;
-    loadedFw.current = fw;
+    if (!open || !selectedFw || loadedFw.current === selectedFw) return;
+    loadedFw.current = selectedFw;
     // Only the latest requested framework may apply, since a slower earlier read can resolve after it.
-    service.readFramework(fw)
+    service.readFramework(selectedFw)
       .then((c) => {
-        if (loadedFw.current !== fw) return;
+        if (loadedFw.current !== selectedFw) return;
         for (const cat of c) seenCategoryCodes.current.add(cat.code);
         setCategories(c);
       })
-      .catch(() => { if (loadedFw.current === fw) setCategories([]); });
+      .catch(() => { if (loadedFw.current === selectedFw) setCategories([]); });
   }, [open, service, selectedFw]);
 
   /* Form/read field definitions — save form for Edit Details, review form for
    * Submit-for-review. Keyed on subtype+action (+ the picked framework, which the
    * form is read for) so switching mode or framework refetches while the drawer stays open. */
-  // Dynamic Assess keeps reading the form of the content's saved framework, as before.
+  // Dynamic Assess reads the form of the content's saved framework: its picker only drives the skill options.
   const formFw = ed.isDynamicAssess ? (content?.framework ?? framework) : (selectedFw || content?.framework || framework);
   useEffect(() => {
     const subtype = content?.primaryCategory ?? content?.contentType ?? '';
@@ -362,7 +362,7 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
       // The Dynamic skill picker shows the selection read from the framework's skill field, not a field named "skill".
       const cv = ed.isDynamicAssess && isSkillField(f) ? content.dynamicSkills : (content as Record<string, unknown>)[f.code];
       if (isMultiField(f, ed.isDynamicAssess)) {
-        multi[f.code] = Array.isArray(cv) ? cv.map(String) : cv != null && cv !== '' ? [String(cv)] : [];
+        multi[f.code] = toMultiValue(cv);
       } else {
         vals[f.code] = cv != null ? String(cv) : '';
       }
@@ -383,13 +383,12 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
     for (const f of fresh) {
       seededCodes.current.add(f.code);
       const cv = (content as Record<string, unknown>)[f.code];
-      if (isMultiField(f)) multi[f.code] = Array.isArray(cv) ? cv.map(String) : cv != null && cv !== '' ? [String(cv)] : [];
+      if (isMultiField(f)) multi[f.code] = toMultiValue(cv);
       else vals[f.code] = Array.isArray(cv) ? String(cv[0] ?? '') : cv != null ? String(cv) : '';
     }
     setValues((s) => ({ ...vals, ...s }));
     setMultiVals((s) => ({ ...multi, ...s }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, content, fields]);
+  }, [open, content, fields, taxoCodes, ed.isDynamicAssess]);
 
   /* Seeds difficultyTarget and skill once they appear (form-only fields, absent from FALLBACK_FIELDS); safe since neither is rendered before then. */
   useEffect(() => {
@@ -591,7 +590,6 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
 
   const onClose = () => { setReviewErrors([]); setReviewSubmitMode(false); setDrawer(null); };
 
-  /* Renders a single form field by its inputType. */
   /** The taxonomy framework picker; the current framework stays selectable even if it isn't in the fetched list. */
   const renderFrameworkPicker = (disabled = false) => {
     const fwList = selectedFw && !fwOptions.some((o) => o.identifier === selectedFw)
@@ -599,7 +597,7 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
       : fwOptions;
     return (
       <div className="ce-field-full">
-        <label className="ce-label-sm" htmlFor="ce-framework-picker">{t(lang, 'DYNAMIC_ASSESS_FRAMEWORK')}</label>
+        <label className="ce-label-sm" htmlFor="ce-framework-picker">{t(lang, ed.isDynamicAssess ? 'DYNAMIC_ASSESS_FRAMEWORK' : 'CONTENT_FRAMEWORK')}</label>
         <div className="ce-select-wrap" style={{ maxWidth: 'none' }}>
           <select
             id="ce-framework-picker"
@@ -609,7 +607,7 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
             onChange={(e) => onFrameworkChange(e.target.value)}
           >
             {/* Only Dynamic Assess may go back to no framework; other content always has one. */}
-            <option value="" disabled={!ed.isDynamicAssess && !!selectedFw}>{t(lang, 'DYNAMIC_ASSESS_SELECT_FRAMEWORK')}</option>
+            <option value="" disabled={!ed.isDynamicAssess && !!selectedFw}>{t(lang, ed.isDynamicAssess ? 'DYNAMIC_ASSESS_SELECT_FRAMEWORK' : 'SELECT_CONTENT_FRAMEWORK')}</option>
             {fwList.map((o) => <option key={o.identifier} value={o.identifier}>{o.name}</option>)}
           </select>
           <span className="ce-select-chevron"><ChevronDown size={12} /></span>
@@ -618,6 +616,7 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
     );
   };
 
+  /* Renders a single form field by its inputType. */
   const renderField = (f: FormField) => {
     const code = f.code;
     const label = f.label ?? f.name ?? code;

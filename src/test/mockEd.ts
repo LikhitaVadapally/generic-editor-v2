@@ -34,7 +34,6 @@ export function mockService(over: Record<string, unknown> = {}): ContentEditorSe
     searchFrameworks: vi.fn().mockResolvedValue([]),
     readChannelFrameworks: vi.fn().mockResolvedValue([]),
     readOrgFrameworkTypes: vi.fn().mockResolvedValue([]),
-    searchFrameworksByType: vi.fn().mockResolvedValue([]),
     searchCompetencyFrameworks: vi.fn().mockResolvedValue([]),
     readCompetencyFramework: vi.fn().mockResolvedValue([]),
     uploadImageAsset: vi.fn().mockResolvedValue('https://cdn/img.png'),

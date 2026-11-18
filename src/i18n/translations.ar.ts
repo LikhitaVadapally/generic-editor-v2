@@ -203,6 +203,8 @@ export const TRANSLATIONS_AR: Record<string, string> = {
   DYNAMIC_ASSESS_GENERATE_FIRST: 'أنشئ الأسئلة قبل الإرسال للمراجعة',
   DYNAMIC_ASSESS_EMPTY_TITLE: 'لم يتم إنشاء أي أسئلة بعد',
   DYNAMIC_ASSESS_EMPTY_SUB: 'افتح تعديل التفاصيل، وحدّد المهارة وهدف الصعوبة، ثم احفظ لإنشاء الأسئلة.',
+  CONTENT_FRAMEWORK: 'الإطار',
+  SELECT_CONTENT_FRAMEWORK: 'اختر الإطار',
   DYNAMIC_ASSESS_FRAMEWORK: 'الإطار',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK: 'اختر الإطار',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK_FIRST: 'اختر إطارًا أولاً',

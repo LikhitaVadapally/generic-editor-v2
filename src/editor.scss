@@ -1619,8 +1619,7 @@
 }
 
 /* Skill tagging sits below the curriculum fields, as its own pair. */
-.ce-taxo-grid + .ce-taxo-grid,
-.ce-meta-top + .ce-taxo-grid--skills {
+.ce-taxo-grid + .ce-taxo-grid {
   margin-top: 13px;
 }
 

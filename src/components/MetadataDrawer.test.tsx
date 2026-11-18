@@ -71,7 +71,7 @@ describe('<MetadataDrawer />', () => {
     render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service, isDynamicAssess: false, content: { ...mockContent, primaryCategory: 'Learning Resource' } })} />);
     expect(await screen.findByText('Skill')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Select Skill/ })).toBeNull();
-    // Any content may pick its taxonomy framework now; that picker is not the Dynamic Assess skill picker.
+    // Every content has a taxonomy framework picker; it is not the Dynamic Assess skill picker.
     expect(screen.getByLabelText('Framework')).toBeInTheDocument();
   });
 
@@ -86,7 +86,7 @@ describe('<MetadataDrawer />', () => {
     ];
     const content = { ...mockContent, primaryCategory: 'Explanation Content', framework: 'USF', industry: 'IT', domain: ['Software'] };
     const service = (over: Record<string, unknown> = {}) => mockService({
-      // One form for every framework, as ed-dev serves: it only knows USF's categories.
+      // One form shared by every framework, which only knows USF's categories.
       readFormFields: vi.fn().mockResolvedValue([
         { code: 'name', inputType: 'text', label: 'Title', required: true, visible: true, editable: true },
         { code: 'industry', inputType: 'select', label: 'Industry', visible: true, editable: true },
@@ -124,7 +124,7 @@ describe('<MetadataDrawer />', () => {
         ]),
         // The content category declares no types, so Course's stand in.
         readOrgFrameworkTypes: vi.fn(async (name: string) => (name === 'Course' ? ['K-12', 'TPD'] : [])),
-        searchFrameworksByType: vi.fn().mockResolvedValue([
+        searchFrameworks: vi.fn().mockResolvedValue([
           { identifier: 'NCF', name: 'CBSE', type: 'K-12' }, { identifier: 'USF', name: 'USF', type: 'K-12' }, { identifier: 'TPD', name: 'TPD', type: 'TPD' },
         ]),
       });
@@ -134,18 +134,18 @@ describe('<MetadataDrawer />', () => {
       expect(screen.queryByRole('option', { name: 'Health Competency Framework 7' })).not.toBeInTheDocument();
       expect(svc.readOrgFrameworkTypes).toHaveBeenCalledWith('Explanation Content', 'Content', 'ch1');
       expect(svc.readOrgFrameworkTypes).toHaveBeenCalledWith('Course', 'Collection', 'ch1');
-      expect(svc.searchFrameworksByType).toHaveBeenCalledWith(['K-12', 'TPD'], 'ch1');
+      expect(svc.searchFrameworks).toHaveBeenCalledWith('ch1', ['K-12', 'TPD']);
     });
 
     it('uses the content category\'s own allowed types when it declares them (positive)', async () => {
       const svc = service({
         readOrgFrameworkTypes: vi.fn(async (name: string) => (name === 'Explanation Content' ? ['K-12'] : ['TPD'])),
-        searchFrameworksByType: vi.fn().mockResolvedValue([{ identifier: 'NCF', name: 'CBSE', type: 'K-12' }]),
+        searchFrameworks: vi.fn().mockResolvedValue([{ identifier: 'NCF', name: 'CBSE', type: 'K-12' }]),
       });
       render(<MetadataDrawer ed={makeEd({ drawer: 'metadata', service: svc, content: { ...content, primaryCategory: 'Explanation Content' } })} />);
       expect(await screen.findByRole('option', { name: 'CBSE' })).toBeInTheDocument();
       expect(svc.readOrgFrameworkTypes).not.toHaveBeenCalledWith('Course', 'Collection', 'ch1');
-      expect(svc.searchFrameworksByType).toHaveBeenCalledWith(['K-12'], 'ch1');
+      expect(svc.searchFrameworks).toHaveBeenCalledWith('ch1', ['K-12']);
     });
 
     it('swaps in the new framework\'s categories, even though the form only knows the old ones (positive)', async () => {

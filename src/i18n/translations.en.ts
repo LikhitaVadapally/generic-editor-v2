@@ -203,6 +203,8 @@ export const TRANSLATIONS_EN: Record<string, string> = {
   DYNAMIC_ASSESS_GENERATE_FIRST: 'Generate questions before sending for review',
   DYNAMIC_ASSESS_EMPTY_TITLE: 'No questions generated yet',
   DYNAMIC_ASSESS_EMPTY_SUB: 'Open Edit details, set Skill and Difficulty Target, and save to generate the questions.',
+  CONTENT_FRAMEWORK: 'Framework',
+  SELECT_CONTENT_FRAMEWORK: 'Select framework',
   DYNAMIC_ASSESS_FRAMEWORK: 'Framework',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK: 'Select framework',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK_FIRST: 'Select a framework first',

@@ -203,6 +203,8 @@ export const TRANSLATIONS_PT: Record<string, string> = {
   DYNAMIC_ASSESS_GENERATE_FIRST: 'Gere as questões antes de enviar para revisão',
   DYNAMIC_ASSESS_EMPTY_TITLE: 'Nenhuma questão gerada ainda',
   DYNAMIC_ASSESS_EMPTY_SUB: 'Abra Editar detalhes, defina a Habilidade e a Meta de dificuldade e salve para gerar as questões.',
+  CONTENT_FRAMEWORK: 'Estrutura',
+  SELECT_CONTENT_FRAMEWORK: 'Selecionar estrutura',
   DYNAMIC_ASSESS_FRAMEWORK: 'Estrutura',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK: 'Selecionar estrutura',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK_FIRST: 'Selecione uma estrutura primeiro',

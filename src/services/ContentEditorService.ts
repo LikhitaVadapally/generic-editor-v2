@@ -1,5 +1,6 @@
 /** ContentEditorService — backend abstraction for the editor; calls go to relative `/action/...` (proxied to knowledge-mw/Kong) by default, overridable via EditorConfig. */
 import type { CompetencyCategoryWire } from '../competencyLeaves';
+import type { FrameworkOption } from '../taxonomy';
 import type { ContentData, EditorContext, EditorConfig, FrameworkCategory, FormField, AssetItem, EnrichmentObject } from '../types';
 
 /** Keep in sync with useEditor.ts's DYNAMIC_ASSESS_CATEGORY (not imported: the modules don't otherwise depend on each other). */
@@ -458,27 +459,44 @@ export class ContentEditorService {
     return Object.fromEntries(skills.map((skill, i) => [skill, Number(results[i]?.count ?? 0) || 0]));
   }
 
-  /** Live system-default frameworks for the Framework picker, channel-scoped via X-Channel-Id, same as question-set editor-v2's searchFrameworks. */
-  async searchFrameworks(channel?: string): Promise<Array<{ identifier: string; name: string }>> {
-    const result = await this.request<{ Framework?: Array<Record<string, unknown>> }>(
-      'POST',
-      this.ep.compositeSearch,
-      { request: { filters: { objectType: 'Framework', status: ['Live'], systemDefault: 'Yes' } } },
-      channel ? { headers: { 'X-Channel-Id': channel } } : undefined,
-    );
-    return (result?.Framework ?? [])
-      .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? '') }))
+  /** `{identifier, name, type?}` per search or channel row; rows without an identifier are dropped. */
+  private static toFrameworkOptions(rows: Array<Record<string, unknown>> | undefined): FrameworkOption[] {
+    return (rows ?? [])
+      .map((f) => ({
+        identifier: String(f.identifier ?? ''),
+        name: String(f.name ?? f.identifier ?? ''),
+        ...(f.type ? { type: String(f.type) } : {}),
+      }))
       .filter((f) => f.identifier);
   }
 
-  /** The channel's own frameworks (channel/v1/read), the same list the course editor's "Course Type" offers. */
-  async readChannelFrameworks(channel: string): Promise<Array<{ identifier: string; name: string; type?: string }>> {
-    const url = `${this.baseUrl}${this.portalSlug}/${this.ep.channelRead}/${encodeURIComponent(channel)}`;
+  /** GET {portalSlug}/{endpoint}/{id}: reads served only by the gateway, not /action. */
+  private async gatewayGet<E>(endpoint: string, id: string): Promise<E> {
+    const url = `${this.baseUrl}${this.portalSlug}/${endpoint}/${encodeURIComponent(id)}`;
     const resp = await this.fetchImpl(url, { method: 'GET', headers: this.headers, credentials: 'same-origin' });
-    const data = await this.readEnvelope<{ result?: { channel?: { frameworks?: Array<Record<string, unknown>> } } }>(resp, url);
-    return (data.result?.channel?.frameworks ?? [])
-      .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? ''), type: f.type ? String(f.type) : undefined }))
-      .filter((f) => f.identifier);
+    return this.readEnvelope<E>(resp, url);
+  }
+
+  /**
+   * Live system-default frameworks for the Framework picker, channel-scoped via X-Channel-Id, same as question-set
+   * editor-v2's searchFrameworks. With `types`, only frameworks of those types (an empty list finds none).
+   */
+  async searchFrameworks(channel?: string, types?: string[]): Promise<FrameworkOption[]> {
+    if (types && !types.length) return [];
+    const filters = { objectType: 'Framework', status: ['Live'], systemDefault: 'Yes', ...(types ? { type: types } : {}) };
+    const result = await this.request<{ Framework?: Array<Record<string, unknown>> }>(
+      'POST',
+      this.ep.compositeSearch,
+      { request: { filters, ...(types ? { fields: ['identifier', 'name', 'type'] } : {}) } },
+      channel ? { headers: { 'X-Channel-Id': channel } } : undefined,
+    );
+    return ContentEditorService.toFrameworkOptions(result?.Framework);
+  }
+
+  /** The channel's own frameworks (channel/v1/read), the same list the course editor's "Course Type" offers. */
+  async readChannelFrameworks(channel: string): Promise<FrameworkOption[]> {
+    const data = await this.gatewayGet<{ result?: { channel?: { frameworks?: Array<Record<string, unknown>> } } }>(this.ep.channelRead, channel);
+    return ContentEditorService.toFrameworkOptions(data.result?.channel?.frameworks);
   }
 
   /**
@@ -496,22 +514,8 @@ export class ContentEditorService {
     return Array.isArray(types) ? types.map(String).filter(Boolean) : [];
   }
 
-  /** Live system-default frameworks of the given types, with their type, channel-scoped via X-Channel-Id. */
-  async searchFrameworksByType(types: string[], channel?: string): Promise<Array<{ identifier: string; name: string; type?: string }>> {
-    if (!types.length) return [];
-    const result = await this.request<{ Framework?: Array<Record<string, unknown>> }>(
-      'POST',
-      this.ep.compositeSearch,
-      { request: { filters: { objectType: 'Framework', status: ['Live'], systemDefault: 'Yes', type: types }, fields: ['identifier', 'name', 'type'] } },
-      channel ? { headers: { 'X-Channel-Id': channel } } : undefined,
-    );
-    return (result?.Framework ?? [])
-      .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? ''), type: f.type ? String(f.type) : undefined }))
-      .filter((f) => f.identifier);
-  }
-
   /** Live skill (competency) frameworks of the channel, for "Skill framework"; they never appear in the curriculum Framework list. */
-  async searchCompetencyFrameworks(channel?: string): Promise<Array<{ identifier: string; name: string }>> {
+  async searchCompetencyFrameworks(channel?: string): Promise<FrameworkOption[]> {
     const result = await this.request<{ CompetencyFramework?: Array<Record<string, unknown>> }>(
       'POST',
       this.ep.compositeSearch,
@@ -520,16 +524,12 @@ export class ContentEditorService {
       { request: { filters: { objectType: ['CompetencyFramework'], status: ['Live'], ...(channel ? { channel: [channel] } : {}) }, fields: ['identifier', 'name'], limit: 100, sort_by: { name: 'asc' } } },
       channel ? { headers: { 'X-Channel-Id': channel } } : undefined,
     );
-    return (result?.CompetencyFramework ?? [])
-      .map((f) => ({ identifier: String(f.identifier ?? ''), name: String(f.name ?? f.identifier ?? '') }))
-      .filter((f) => f.identifier);
+    return ContentEditorService.toFrameworkOptions(result?.CompetencyFramework);
   }
 
   /** GET {portalSlug}/competency-framework/v3/read/{id} — a skill framework's categories and terms. */
   async readCompetencyFramework(frameworkId: string): Promise<CompetencyCategoryWire[]> {
-    const url = `${this.baseUrl}${this.portalSlug}/${this.ep.competencyFrameworkRead}/${encodeURIComponent(frameworkId)}`;
-    const resp = await this.fetchImpl(url, { method: 'GET', headers: this.headers, credentials: 'same-origin' });
-    const data = await this.readEnvelope<{ result?: { framework?: { categories?: CompetencyCategoryWire[] } } }>(resp, url);
+    const data = await this.gatewayGet<{ result?: { framework?: { categories?: CompetencyCategoryWire[] } } }>(this.ep.competencyFrameworkRead, frameworkId);
     return data.result?.framework?.categories ?? [];
   }
 

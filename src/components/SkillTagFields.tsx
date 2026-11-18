@@ -17,10 +17,9 @@ const SkillTagFields: React.FC<{
   /** The framework's skill field; undefined until the framework loads. */
   skillField: string | undefined;
   values: string[];
-  disabled?: boolean;
   onFrameworkChange: (frameworkId: string) => void;
   onSkillsChange: (codes: string[]) => void;
-}> = ({ lang, frameworks, frameworkId, skills, skillField, values, disabled, onFrameworkChange, onSkillsChange }) => {
+}> = ({ lang, frameworks, frameworkId, skills, skillField, values, onFrameworkChange, onSkillsChange }) => {
   if (!frameworks.length && !frameworkId) return null;
   // The saved framework stays selectable even if it is no longer Live.
   const fwList = frameworkId && !frameworks.some((f) => f.identifier === frameworkId)
@@ -32,7 +31,7 @@ const SkillTagFields: React.FC<{
     ...values.filter((c) => !skills.some((s) => s.code === c)).map((c) => ({ code: c, name: c })),
   ];
   return (
-    <div className="ce-taxo-grid ce-taxo-grid--skills" data-testid="skill-tag-fields">
+    <div className="ce-taxo-grid" data-testid="skill-tag-fields">
       <div>
         <label className="ce-label-sm" htmlFor="ce-skill-framework-picker">{t(lang, 'SKILL_FRAMEWORK')}</label>
         <div className="ce-select-wrap" style={{ maxWidth: 'none' }}>
@@ -40,7 +39,6 @@ const SkillTagFields: React.FC<{
             id="ce-skill-framework-picker"
             className="ce-select ce-select-sm"
             value={frameworkId}
-            disabled={disabled}
             onChange={(e) => onFrameworkChange(e.target.value)}
           >
             <option value="" disabled={!!frameworkId}>{t(lang, 'SELECT_SKILL_FRAMEWORK')}</option>
@@ -52,7 +50,7 @@ const SkillTagFields: React.FC<{
       <MultiSelect
         label={t(lang, 'SKILLS')}
         placeholder={frameworkId ? t(lang, 'SELECT_SKILLS') : t(lang, 'SELECT_SKILL_FRAMEWORK_FIRST')}
-        disabled={disabled || !skillField}
+        disabled={!skillField}
         values={values}
         options={skillField ? options : []}
         valueKey="code"

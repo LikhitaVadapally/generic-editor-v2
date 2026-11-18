@@ -203,6 +203,8 @@ export const TRANSLATIONS_TA: Record<string, string> = {
   DYNAMIC_ASSESS_GENERATE_FIRST: 'மதிப்பாய்வுக்கு அனுப்பும் முன் கேள்விகளை உருவாக்கவும்',
   DYNAMIC_ASSESS_EMPTY_TITLE: 'இதுவரை கேள்விகள் எதுவும் உருவாக்கப்படவில்லை',
   DYNAMIC_ASSESS_EMPTY_SUB: 'விவரங்களைத் திருத்து என்பதைத் திறந்து, திறன் மற்றும் கடினத்தன்மை இலக்கை அமைத்து, கேள்விகளை உருவாக்கச் சேமிக்கவும்.',
+  CONTENT_FRAMEWORK: 'கட்டமைப்பு',
+  SELECT_CONTENT_FRAMEWORK: 'கட்டமைப்பைத் தேர்ந்தெடு',
   DYNAMIC_ASSESS_FRAMEWORK: 'கட்டமைப்பு',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK: 'கட்டமைப்பைத் தேர்ந்தெடு',
   DYNAMIC_ASSESS_SELECT_FRAMEWORK_FIRST: 'முதலில் ஒரு கட்டமைப்பைத் தேர்ந்தெடுக்கவும்',

@@ -48,6 +48,7 @@ const SkillTagFields: React.FC<{
         </div>
       </div>
       <MultiSelect
+        lang={lang}
         label={t(lang, 'SKILLS')}
         placeholder={frameworkId ? t(lang, 'SELECT_SKILLS') : t(lang, 'SELECT_SKILL_FRAMEWORK_FIRST')}
         disabled={!skillField}

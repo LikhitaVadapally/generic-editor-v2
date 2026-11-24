@@ -3029,3 +3029,21 @@
 .ce-editor h4, .ce-editor h5, .ce-editor h6 {
   text-wrap: wrap;
 }
+
+/* Stays at the top of the multi-select panel while the options scroll under it. */
+.ce-multi-search {
+  position: sticky;
+  top: -4px;
+  z-index: 1;
+  display: block;
+  width: calc(100% + 8px);
+  margin: -4px -4px 4px;
+  padding: 9px 12px;
+  border: none;
+  border-bottom: 1px solid var(--ce-border-2);
+  border-radius: 10px 10px 0 0;
+  background: var(--ce-white);
+  font-size: 13px;
+  color: var(--ce-ink);
+  outline: none;
+}

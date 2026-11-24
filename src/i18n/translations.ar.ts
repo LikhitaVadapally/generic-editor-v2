@@ -242,4 +242,6 @@ export const TRANSLATIONS_AR: Record<string, string> = {
   SKILLS: 'المهارات',
   SELECT_SKILLS: 'اختر المهارات',
   SELECT_SKILL_FRAMEWORK_FIRST: 'اختر إطار مهارات أولاً',
+  SEARCH_OPTIONS: 'بحث…',
+  NO_MATCHES: 'لا توجد نتائج',
 };

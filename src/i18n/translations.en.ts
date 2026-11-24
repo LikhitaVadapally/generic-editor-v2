@@ -253,4 +253,6 @@ export const TRANSLATIONS_EN: Record<string, string> = {
   SKILLS: 'Skills',
   SELECT_SKILLS: 'Select skills',
   SELECT_SKILL_FRAMEWORK_FIRST: 'Select a skill framework first',
+  SEARCH_OPTIONS: 'Search…',
+  NO_MATCHES: 'No matches',
 };

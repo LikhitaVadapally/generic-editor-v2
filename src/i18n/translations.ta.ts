@@ -242,4 +242,6 @@ export const TRANSLATIONS_TA: Record<string, string> = {
   SKILLS: 'திறன்கள்',
   SELECT_SKILLS: 'திறன்களைத் தேர்ந்தெடுக்கவும்',
   SELECT_SKILL_FRAMEWORK_FIRST: 'முதலில் திறன் கட்டமைப்பைத் தேர்ந்தெடுக்கவும்',
+  SEARCH_OPTIONS: 'தேடுக…',
+  NO_MATCHES: 'பொருத்தங்கள் இல்லை',
 };

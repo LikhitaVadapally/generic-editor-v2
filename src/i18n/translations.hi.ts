@@ -242,4 +242,6 @@ export const TRANSLATIONS_HI: Record<string, string> = {
   SKILLS: 'कौशल',
   SELECT_SKILLS: 'कौशल चुनें',
   SELECT_SKILL_FRAMEWORK_FIRST: 'पहले कौशल फ्रेमवर्क चुनें',
+  SEARCH_OPTIONS: 'खोजें…',
+  NO_MATCHES: 'कोई परिणाम नहीं',
 };

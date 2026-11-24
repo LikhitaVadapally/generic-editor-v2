@@ -653,6 +653,7 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
         <React.Fragment key={code}>
           {renderFrameworkPicker(disabled)}
           <MultiSelect
+            lang={lang}
             label={skillCategoryLabel ?? label}
             placeholder={skillCategoryCode ? (placeholder || `Select ${skillCategoryLabel ?? label}`) : t(lang, 'DYNAMIC_ASSESS_SELECT_FRAMEWORK_FIRST')}
             required={required}
@@ -671,6 +672,7 @@ const MetadataDrawer: React.FC<{ ed: EditorController }> = ({ ed }) => {
       if (isMultiField(f, ed.isDynamicAssess)) {
         return (
           <MultiSelect
+            lang={lang}
             key={code}
             label={label}
             placeholder={placeholder || `Select ${label}`}

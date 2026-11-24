@@ -242,4 +242,6 @@ export const TRANSLATIONS_FR: Record<string, string> = {
   SKILLS: 'Compétences',
   SELECT_SKILLS: 'Sélectionnez des compétences',
   SELECT_SKILL_FRAMEWORK_FIRST: 'Sélectionnez d’abord un cadre de compétences',
+  SEARCH_OPTIONS: 'Rechercher…',
+  NO_MATCHES: 'Aucun résultat',
 };
